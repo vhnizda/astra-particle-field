@@ -28,6 +28,8 @@
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W=0,H=0,DPR=1, yaw=0, pitch=0, targetYaw=0, targetPitch=0, intro=0, then=performance.now();
   const rand = mulberry32(27), stars=[];
+  // Travel from each path's outer end back toward its centre, then wrap.
+  const FLOW_SPEED = .045;
   const colors = [[109,203,244],[122,177,254],[248,121,21],[250,153,76],[245,246,251]];
   const weights = [.15,.18,.07,.08,.52];
   function mulberry32(a){return()=>{let t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
@@ -43,9 +45,9 @@
     const count = Math.min(innerWidth < 700 ? 3800 : 7600, reduced ? 1500 : 7600);
     stars.length=0;
     for(let i=0;i<count;i++){
-      const path=paths[rand()<.86?0:1], p=pointOn(path,rand());
+      const path=paths[rand()<.86?0:1], t=rand();
       const c=color(), bright=.35+rand()*.65;
-      stars.push({x:p[0]+gaussian()*.09,y:p[1]+gaussian()*.09,z:gaussian()*.13,r:.35+Math.pow(rand(),3)*2.6,c,bright,phase:rand()*Math.PI*2,drift:(rand()-.5)*.5});
+      stars.push({path,t,ox:gaussian()*.09,oy:gaussian()*.09,z:gaussian()*.13,r:.35+Math.pow(rand(),3)*2.6,c,bright,phase:rand()*Math.PI*2});
     }
   }
   function resize(){ DPR=Math.min(devicePixelRatio||1,2); W=innerWidth;H=innerHeight; canvas.width=W*DPR;canvas.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0); build(); }
@@ -58,7 +60,9 @@
     const glow=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.min(W,H)*.52);glow.addColorStop(0,'rgba(38,73,99,.17)');glow.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);
     const fade = reduced ? 1 : Math.min(1,intro*1.7);
     for(const s of stars){
-      let x=s.x*Math.cos(yaw)-s.z*Math.sin(yaw), z=s.x*Math.sin(yaw)+s.z*Math.cos(yaw), y=s.y*Math.cos(pitch)-z*Math.sin(pitch);
+      s.t = (s.t - FLOW_SPEED * dt + 1) % 1;
+      const p = pointOn(s.path, s.t);
+      let x=(p[0]+s.ox)*Math.cos(yaw)-s.z*Math.sin(yaw), z=(p[0]+s.ox)*Math.sin(yaw)+s.z*Math.cos(yaw), y=(p[1]+s.oy)*Math.cos(pitch)-z*Math.sin(pitch);
       const perspective=1/(1+z*.12), px=cx+x*scale*perspective,py=cy-y*scale*perspective;
       if(px<-8||px>W+8||py<-8||py>H+8)continue;
       const twinkle=.72+.28*Math.sin(now*.00062+s.phase); const a=s.bright*twinkle*fade, r=s.r*perspective;
