@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Astra particle field — local study</title>
+<style>
+  :root { color-scheme: dark; background:#000; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+  * { box-sizing:border-box } body { margin:0; overflow:hidden; background:#000; }
+  canvas { display:block; width:100vw; height:100vh; cursor:grab; touch-action:none; }
+  canvas:active { cursor:grabbing; }
+  .label { position:fixed; top:clamp(18px,4vw,56px); font-size:clamp(25px,4.3vw,68px); letter-spacing:-.08em; font-weight:500; pointer-events:none; }
+  .left { left:clamp(18px,4vw,56px) } .right { right:clamp(18px,4vw,56px) }
+  .help { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); color:#cfd9e5; font-size:12px; letter-spacing:.03em; opacity:.72; text-align:center; pointer-events:none; }
+  button { position:fixed; right:22px; bottom:20px; width:42px; height:42px; border:1px solid #8291a299; border-radius:50%; background:#10151bbb; color:#eef7ff; font-size:22px; cursor:pointer; }
+  button:hover { background:#273747; }
+  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
+</style>
+</head>
+<body>
+<canvas id="field" tabindex="0" aria-label="Drag or use arrow keys to rotate the Astra star field"></canvas>
+<div class="label left">GPT</div><div class="label right">Astra</div>
+<div class="help">Drag or use arrow keys to rotate the star field</div>
+<button id="replay" aria-label="Replay spiral field animation">↻<span class="sr">Replay</span></button>
+<script>
+(() => {
+  const canvas = document.querySelector('#field'), ctx = canvas.getContext('2d');
+  const replay = document.querySelector('#replay');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W=0,H=0,DPR=1, yaw=0, pitch=0, targetYaw=0, targetPitch=0, intro=0, then=performance.now();
+  const rand = mulberry32(27), stars=[];
+  const colors = [[109,203,244],[122,177,254],[248,121,21],[250,153,76],[245,246,251]];
+  const weights = [.15,.18,.07,.08,.52];
+  function mulberry32(a){return()=>{let t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+  function gaussian(){ let u=0,v=0; while(!u)u=rand();while(!v)v=rand();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+  function color(){ let n=rand(),s=0; for(let i=0;i<weights.length;i++){s+=weights[i];if(n<s)return colors[i]} return colors[4]; }
+  // Two paths from the archived page's public configuration, forming the number six.
+  const paths = [
+    [[0,0],[.37,-.19],[.31,-.45],[-.14,-.58],[-.59,-.32],[-.72,.13],[-.46,.58],[.12,.77],[.69,.58],[1.01,.06],[.88,-.58],[.31,-1.03],[-.53,-1.03],[-1.23,-.58],[-1.49,.13],[-1.3,.9],[-.65,1.47],[.12,1.6],[.95,1.28],[1.59,.58],[1.72,-.38],[1.33,-1.22],[.5,-1.73],[-.53,-1.67],[-1.42,-1.09],[-1.81,-.19],[-1.74,.9],[-1.49,1.86],[-.97,2.69],[-.14,3.46]],
+    [[-1.25,1.05],[-1.2,1.62],[-.9,2.18],[-.4,2.66],[.2,3.02],[.92,3.14],[1.66,3.07]]
+  ];
+  function pointOn(path,t){ const n=path.length-1, x=t*n, i=Math.min(n-1,Math.floor(x)), f=x-i, a=path[i],b=path[i+1]; return [a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f]; }
+  function build(){
+    const count = Math.min(innerWidth < 700 ? 3800 : 7600, reduced ? 1500 : 7600);
+    stars.length=0;
+    for(let i=0;i<count;i++){
+      const path=paths[rand()<.86?0:1], p=pointOn(path,rand());
+      const c=color(), bright=.35+rand()*.65;
+      stars.push({x:p[0]+gaussian()*.09,y:p[1]+gaussian()*.09,z:gaussian()*.13,r:.35+Math.pow(rand(),3)*2.6,c,bright,phase:rand()*Math.PI*2,drift:(rand()-.5)*.5});
+    }
+  }
+  function resize(){ DPR=Math.min(devicePixelRatio||1,2); W=innerWidth;H=innerHeight; canvas.width=W*DPR;canvas.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0); build(); }
+  function draw(now){
+    const dt=Math.min(.05,(now-then)/1000); then=now;
+    if(!reduced) { targetYaw += dt*.022; intro=Math.min(1,intro+dt/2.2); }
+    yaw += (targetYaw-yaw)*Math.min(1,dt*5); pitch += (targetPitch-pitch)*Math.min(1,dt*5);
+    ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
+    const scale=Math.min(W,H)*.18, cx=W*.5,cy=H*.55;
+    const glow=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.min(W,H)*.52);glow.addColorStop(0,'rgba(38,73,99,.17)');glow.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);
+    const fade = reduced ? 1 : Math.min(1,intro*1.7);
+    for(const s of stars){
+      let x=s.x*Math.cos(yaw)-s.z*Math.sin(yaw), z=s.x*Math.sin(yaw)+s.z*Math.cos(yaw), y=s.y*Math.cos(pitch)-z*Math.sin(pitch);
+      const perspective=1/(1+z*.12), px=cx+x*scale*perspective,py=cy-y*scale*perspective;
+      if(px<-8||px>W+8||py<-8||py>H+8)continue;
+      const twinkle=.72+.28*Math.sin(now*.00062+s.phase); const a=s.bright*twinkle*fade, r=s.r*perspective;
+      ctx.fillStyle=`rgba(${s.c[0]},${s.c[1]},${s.c[2]},${a})`;
+      ctx.beginPath();ctx.arc(px,py,r,0,Math.PI*2);ctx.fill();
+      if(r>1.3){ctx.fillStyle=`rgba(${s.c[0]},${s.c[1]},${s.c[2]},${a*.12})`;ctx.beginPath();ctx.arc(px,py,r*4,0,Math.PI*2);ctx.fill();}
+    }
+    requestAnimationFrame(draw);
+  }
+  let drag=null;
+  canvas.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId);canvas.focus()});
+  canvas.addEventListener('pointermove',e=>{if(!drag)return;targetYaw+=(e.clientX-drag[0])*.005;targetPitch=Math.max(-.8,Math.min(.8,targetPitch+(e.clientY-drag[1])*.005));drag=[e.clientX,e.clientY]});
+  canvas.addEventListener('pointerup',()=>drag=null); canvas.addEventListener('pointercancel',()=>drag=null);
+  canvas.addEventListener('keydown',e=>{const d={ArrowLeft:[-.08,0],ArrowRight:[.08,0],ArrowUp:[0,-.08],ArrowDown:[0,.08]}[e.key];if(d){e.preventDefault();targetYaw+=d[0];targetPitch=Math.max(-.8,Math.min(.8,targetPitch+d[1]));}});
+  replay.addEventListener('click',()=>{intro=0;targetYaw=yaw=0;targetPitch=pitch=0;build();canvas.focus()});
+  addEventListener('resize',resize); resize(); requestAnimationFrame(draw);
+})();
+</script>
+</body></html>
